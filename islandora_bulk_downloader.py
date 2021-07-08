@@ -9,7 +9,7 @@ import urllib.request
 import requests
 from PIL import Image
 from PyPDF2 import PdfFileMerger
-# from shutil import rmtree
+from shutil import rmtree, copytree
 
 # Functions
 def pid_to_path(pid):
@@ -165,9 +165,12 @@ with open(args.pid_file, 'r', newline='') as csv_reader_file_handle:
             content_path = os.path.join(args.output_dir, (pid_to_path(row['PID'])+ext))
         elif not os.path.exists(os.path.join(args.output_dir, pid_to_path(properties['isConstituentOf']))):
             os.mkdir(os.path.join(args.output_dir, pid_to_path(properties['isConstituentOf'])))
+        if bool(properties['isSequenceNumberOf']):
             content_path = os.path.join(args.output_dir, pid_to_path(properties['isConstituentOf']), (properties['isSequenceNumberOf']+"_"+pid_to_path(row['PID']))+ext)
+        elif bool(properties['isSequenceNumber']):
+            content_path = os.path.join(args.output_dir, pid_to_path(properties['isConstituentOf']), (properties['isSequenceNumber']+"_"+pid_to_path(row['PID']))+ext)
         else:
-            content_path = os.path.join(args.output_dir, pid_to_path(properties['isConstituentOf']), (properties['isSequenceNumberOf'] + "_" + pid_to_path(row['PID'])) + ext)
+            content_path = os.path.join(args.output_dir, pid_to_path(properties['isConstituentOf']), ("_" + pid_to_path(row['PID'])) + ext)
         with open(content_path, 'wb') as file:
             file.write(obj.content)
 
@@ -176,19 +179,31 @@ for root, dirs, files in os.walk(args.output_dir):
     for dir in dirs:
         if dir.startswith('km'):
             dir_files = os.listdir(os.path.join(root, dir))
-            if len(dir_files)>1: #if there's more than one component in folder, sort & save as one pdf
+            if dir_files[0].endswith('mp3'):
+                if not os.path.exists(os.path.join(root, 'video')):
+                    os.mkdir(os.path.join(root, 'audio'))
+                dest = os.path.join(root,'audio', dir)
+                copytree(os.path.join(root, dir), dest)
+                continue
+            elif dir_files[0].endswith('mp4'):
+                if not os.path.exists(os.path.join(root, 'video')):
+                    os.mkdir(os.path.join(root, 'video'))
+                dest = os.path.join(root, 'video', dir)
+                copytree(os.path.join(root, dir), dest)
+                continue
+            elif len(dir_files)>1: #if there's more than one component in folder, sort & save as one pdf
                 dir_files.sort(key=lambda x: int(x.split("_")[0]))
                 pdfs = []
                 merger = PdfFileMerger()
-                for img in dir_files:
-                    if img.endswith('.jp2') or img.endswith('.tiff'):
-                        im = Image.open(os.path.join(root, dir, img))
-                        filename = os.path.splitext(img)[0]
+                for obj in dir_files:
+                    if obj.endswith('.jp2') or obj.endswith('.tiff'):
+                        im = Image.open(os.path.join(root, dir, obj))
+                        filename = os.path.splitext(obj)[0]
                         new_fn = filename + '.pdf'
                         im.save(os.path.join(root, dir, new_fn))
                         im.close()
                         pdfs.append(new_fn)
-                        os.remove(os.path.join(root,dir,img))
+                        os.remove(os.path.join(root,dir,obj))
                 for pdf in pdfs:
                     fpath = os.path.join(root, dir, pdf)
                     merger.append(fpath)
@@ -204,9 +219,11 @@ for root, dirs, files in os.walk(args.output_dir):
                     im.close()
                     os.remove(os.path.join(root,dir,item))
 
-# clean up to remove subdirs - assumes all images captured in pdfs
-# dir = os.listdir(args.output_dir)
-# for item in dir:
-#     path = os.path.join(args.output_dir, item)
-#     if not os.path.isfile(path):
-#         rmtree(path)
+dir = os.listdir(args.output_dir)
+for item in dir:
+    if item == 'audio' or item == 'video':
+        continue
+    else:
+        path = os.path.join(args.output_dir, item)
+        if not os.path.isfile(path):
+            rmtree(path)
